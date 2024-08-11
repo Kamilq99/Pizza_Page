@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	_ "github.com/lib/pq" // Importowanie sterownika PostgreSQL
+	_ "github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -15,9 +15,13 @@ type User struct {
 	Password string `json:"password"`
 }
 
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 var db *sql.DB
 
-// Funkcja inicjalizująca bazę danych
 func initDB() {
 	var err error
 	// Ustal połączenie do bazy danych
@@ -33,7 +37,6 @@ func initDB() {
 	}
 }
 
-// Funkcja rejestracji użytkownika
 func registerUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -79,11 +82,48 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(newUser)
 }
 
-// Funkcja główna
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var loginReq LoginRequest
+	err := json.NewDecoder(r.Body).Decode(&loginReq)
+	if err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Pobranie użytkownika z bazy danych
+	var user User
+	err = db.QueryRow("SELECT username, email, password FROM users WHERE email = $1", loginReq.Email).Scan(&user.Username, &user.Email, &user.Password)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Sprawdzenie hasła
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(loginReq.Password))
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Wysłanie pozytywnej odpowiedzi
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode("Login successful")
+}
+
 func main() {
 	initDB() // Inicjalizacja bazy danych
 	defer db.Close() // Zamknij połączenie z bazą danych po zakończeniu
 
 	http.HandleFunc("/register", registerUser)
+	http.HandleFunc("/login", loginHandler)
 	http.ListenAndServe(":8080", nil)
 }
