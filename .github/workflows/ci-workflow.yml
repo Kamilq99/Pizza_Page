@@ -1,1 +1,34 @@
+name: Test_App_Workflow
 
+on:
+    push:
+        branches: [ main ]
+    pull_request:
+        branches: [ main ]
+
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v2
+
+            - name: Set up Golang
+              uses: actions/setup-go@v2
+              with:
+                go-version: 1.24.1
+            
+            - name: Set up CMake
+              uses: jwlawson/actions-setup-cmake@v1.13
+              with:
+                cmake-version: 3.22.1
+            
+            - name: Install dependencies
+              run: go mod tidy
+              working-directory: login_service
+
+            - name: Run Tests
+              run: make test
+              working-directory: login_service
